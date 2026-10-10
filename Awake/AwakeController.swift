@@ -17,8 +17,6 @@ final class AwakeController {
     private(set) var isActive = false
     /// Nil means indefinite.
     private(set) var endDate: Date?
-    /// Refreshed periodically so "time left" text stays current.
-    private(set) var now = Date()
 
     @ObservationIgnored private let assertion = SleepAssertion()
     @ObservationIgnored private var expiryTimer: Timer?
@@ -48,9 +46,6 @@ final class AwakeController {
         #endif
     }
 
-    var assertionHeld: Bool { assertion.isActive }
-    var assertionPreventsDisplaySleep: Bool { assertion.preventsDisplaySleep }
-
     /// Activates immediately. `duration` nil means indefinitely.
     func activate(for duration: TimeInterval? = nil) {
         stopTimers()
@@ -59,11 +54,10 @@ final class AwakeController {
             return
         }
         isActive = true
-        now = Date()
         endDate = duration.map { Date().addingTimeInterval($0) }
         if let duration {
             expiryTimer = schedule(after: duration, repeats: false) { $0.expireIfDue() }
-            tickTimer = schedule(after: 15, repeats: true) { $0.now = Date(); $0.expireIfDue() }
+            tickTimer = schedule(after: 15, repeats: true) { $0.expireIfDue() }
         }
     }
 
@@ -81,7 +75,7 @@ final class AwakeController {
     /// e.g. "42 min left", "1 hr 5 min left"; nil when indefinite or inactive.
     var timeLeftText: String? {
         guard isActive, let endDate else { return nil }
-        let minutes = max(1, Int((endDate.timeIntervalSince(now) / 60).rounded(.up)))
+        let minutes = max(1, Int((endDate.timeIntervalSinceNow / 60).rounded(.up)))
         if minutes >= 60 {
             let h = minutes / 60, m = minutes % 60
             return m == 0 ? "\(h) hr left" : "\(h) hr \(m) min left"
