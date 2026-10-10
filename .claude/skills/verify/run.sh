@@ -1,5 +1,5 @@
 #!/bin/bash
-# Mechanical verify steps for Awake (menu bar keep-awake app). Usage: run.sh up|doctor|shot|down
+# Mechanical verify steps for Awake (menu bar keep-awake app). Usage: run.sh up|doctor|toggle|menu|down
 set -u
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 HASH="$(printf '%s' "$REPO" | shasum | cut -c1-8)"
@@ -33,14 +33,31 @@ doctor)
   [ -n "$L" ] || { echo "FAIL: no PreventUserIdleSystemSleep for pid $P"; exit 1; }
   echo "OK pid=$P: $L"
   ;;
-shot)
-  # Opens the menu via System Events (needs Accessibility permission for the calling terminal) and captures top-right.
-  OUT="${2:-$EV/menu-open.png}"
+toggle)
+  # Plain left-click on the status item: toggles keep-awake. Prints the Awake assertion count after (0 = off).
   osascript -e 'tell application "System Events" to tell process "Awake" to click menu bar item 1 of menu bar 2' > "$EV/osascript.log" 2>&1 \
     || { echo "BLOCKED: click failed: $(cat "$EV/osascript.log")"; exit 2; }
-  sleep 1
-  W="$(osascript -e 'tell application "Finder" to get item 3 of (get bounds of window of desktop)' 2>/dev/null || echo 1512)"
-  screencapture -x -R "$((W-700)),0,700,420" "$OUT" && echo "SHOT $OUT"
+  sleep 1; echo "ASSERTIONS $(pmset -g assertions | grep -c '(Awake)')"
+  ;;
+menu)
+  # Control-click on the status item (AXShowMenu does nothing here), list the menu items, then close it.
+  cat > "$EV/ctrlclick.swift" <<'SW'
+import CoreGraphics
+import Foundation
+let p = CGPoint(x: Double(CommandLine.arguments[1])!, y: Double(CommandLine.arguments[2])!)
+for t in [CGEventType.leftMouseDown, .leftMouseUp] {
+    let e = CGEvent(mouseEventSource: nil, mouseType: t, mouseCursorPosition: p, mouseButton: .left)!
+    e.flags = .maskControl
+    e.post(tap: .cghidEventTap)
+    usleep(80000)
+}
+SW
+  swiftc -o "$EV/ctrlclick" "$EV/ctrlclick.swift" 2>"$EV/swiftc.log" || { echo "FAIL: swiftc, see $EV/swiftc.log"; exit 1; }
+  POS="$(osascript -e 'tell application "System Events" to tell process "Awake" to get {position, size} of menu bar item 1 of menu bar 2' 2>"$EV/osascript.log")" \
+    || { echo "BLOCKED: $(cat "$EV/osascript.log")"; exit 2; }
+  X="$(echo "$POS" | awk -F', ' '{print $1+$3/2}')"; Y="$(echo "$POS" | awk -F', ' '{print $2+$4/2}')"
+  "$EV/ctrlclick" "$X" "$Y"; sleep 1
+  osascript -e 'tell application "System Events" to tell process "Awake" to get name of every menu item of menu 1 of menu bar item 1 of menu bar 2'
   osascript -e 'tell application "System Events" to key code 53' >/dev/null 2>&1
   ;;
 down)
@@ -54,5 +71,5 @@ down)
   ( cd "$REPO" && git status --porcelain ) > "$EV/git-status.after"
   diff -q "$EV/git-status.before" "$EV/git-status.after" >/dev/null 2>&1 && echo "DOWN clean, no drift, no Awake assertions" || echo "DOWN ok, but git status drift (see $EV/git-status.*)"
   ;;
-*) echo "usage: run.sh up|doctor|shot [out.png]|down"; exit 64;;
+*) echo "usage: run.sh up|doctor|toggle|menu|down"; exit 64;;
 esac

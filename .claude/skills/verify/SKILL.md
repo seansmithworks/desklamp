@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Verify the Awake macOS menu bar keep-awake app (SwiftUI MenuBarExtra, XcodeGen). Use after changing anything under Awake/ to confirm it builds, launches, holds a PreventUserIdleSystemSleep assertion, shows its menu, and releases the assertion on quit.
+description: Verify the Awake macOS menu bar keep-awake app (AppKit NSStatusItem, XcodeGen). Use after changing anything under Awake/ to confirm it builds, launches, holds a PreventUserIdleSystemSleep assertion, shows its menu, and releases the assertion on quit.
 ---
 
 # verify: Awake
@@ -14,16 +14,16 @@ Surface: macOS menu bar app (LSUIElement, no Dock icon, no window). Driver: `.cl
 `run.sh doctor` confirms the recorded pid is alive, is our build, and that `pmset -g assertions` lists `PreventUserIdleSystemSleep` for that pid. Prints `OK pid=...: <assertion line>`.
 
 ## Drive
-1. `run.sh shot` clicks the menu bar item (`click menu bar item 1 of menu bar 2` via System Events) and screencaptures the top-right 700x420 to `<evidence>/menu-open.png`. Pass a path to save elsewhere (e.g. `docs/menu-open.png`).
-2. Read the screenshot: the menu should be open under the Awake icon, listing the activate toggle, duration options and quit. A closed menu or an empty strip means the click did not land.
-3. Known limit (observed 2026-10-10): the AX click succeeds and the menu items are readable (`Stop Keeping Awake, Keep Awake For, Allow Display Sleep, Launch at Login, Quit Awake`), but `screencapture` did not render the open menu, so the PNG shows the closed menu bar. Treat the AX item list as the menu evidence and do not commit a PNG that lacks the dropdown.
-4. Exit code 2 / `BLOCKED` means the terminal lacks Accessibility permission. Report it; do not change system settings, and fall back to the `doctor` evidence only.
+Interaction model: plain left-click toggles keep-awake; right-click or Control-click opens the menu.
+1. `run.sh toggle` left-clicks the status item (System Events, `click menu bar item 1 of menu bar 2`) and prints `ASSERTIONS <n>` (count of `(Awake)` lines in `pmset -g assertions`). Run twice: after `up` (starts active) expect 0, then 2 (system + display). Both directions are the evidence.
+2. `run.sh menu` Control-clicks the item via a tiny CGEvent helper (compiled with `swiftc` into the evidence dir), prints the menu item names, then presses Esc. Expect `Stop Keeping Awake` (or `Keep Awake`), `Keep Awake For`, `Allow Display Sleep`, `Launch at Login`, `Quit Awake`, with `missing value` for the two separators.
+3. Known limits: System Events `perform action "AXShowMenu"` returns without opening anything (the item has no menu attached until a right/ctrl click), so do not use it. Both scripts need Accessibility permission for the calling terminal; exit 2 / `BLOCKED` means it is missing. Report it; do not change system settings, and fall back to the `doctor` evidence only. `screencapture` does not render the open menu, so the AX item list is the menu evidence.
 
 ## Evidence
-`assertions.active.txt`, `assertions.after.txt`, `build.log`, `menu-open.png`, git status before/after.
+`assertions.active.txt`, `assertions.after.txt`, `build.log`, git status before/after.
 
 ## Gotchas
-- Debug-only launch arg `-activateOnLaunch YES` is how activation is driven headlessly; the real path is clicking the menu toggle.
+- Debug-only launch arg `-activateOnLaunch YES` is how activation is driven headlessly; the real path is left-clicking the status item.
 - Use `open -n` of the DerivedData build, never a stale copy in /Applications; `down` kills only the recorded pid.
 - `*.xcodeproj` is gitignored and regenerated each run. Tests: `xcodebuild -scheme Awake test` (not part of this flow).
 - The app is sandboxed and ad-hoc signed; no side effects beyond the power assertion.
