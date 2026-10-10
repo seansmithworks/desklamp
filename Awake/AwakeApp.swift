@@ -5,7 +5,6 @@ import ServiceManagement
 struct AwakeApp: App {
     @State private var controller = AwakeController()
     @AppStorage(AwakeController.allowDisplaySleepKey) private var allowDisplaySleep = false
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     private static let appName =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Awake"
@@ -35,7 +34,7 @@ struct AwakeApp: App {
             Toggle("Allow Display Sleep", isOn: $allowDisplaySleep)
 
             Toggle("Launch at Login", isOn: Binding(
-                get: { launchAtLogin },
+                get: { SMAppService.mainApp.status == .enabled },
                 set: { setLaunchAtLogin($0) }
             ))
 
@@ -62,6 +61,5 @@ struct AwakeApp: App {
         } catch {
             NSLog("Launch at login change failed: \(error)")
         }
-        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

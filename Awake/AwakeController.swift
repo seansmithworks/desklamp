@@ -1,5 +1,13 @@
-import Foundation
+import AppKit
 import Observation
+
+extension UserDefaults {
+    /// KVO-observable accessor; the property name is the defaults key.
+    @objc dynamic var allowDisplaySleep: Bool {
+        get { bool(forKey: "allowDisplaySleep") }
+        set { set(newValue, forKey: "allowDisplaySleep") }
+    }
+}
 
 @MainActor
 @Observable
@@ -12,26 +20,27 @@ final class AwakeController {
     /// Refreshed periodically so "time left" text stays current.
     private(set) var now = Date()
 
-    private let assertion = SleepAssertion()
-    private var expiryTimer: Timer?
-    private var tickTimer: Timer?
-    private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private let assertion = SleepAssertion()
+    @ObservationIgnored private var expiryTimer: Timer?
+    @ObservationIgnored private var tickTimer: Timer?
+    @ObservationIgnored private var defaultsObservation: NSKeyValueObservation?
+    @ObservationIgnored private var observers: [NSObjectProtocol] = []
 
-    private var allowDisplaySleep: Bool {
-        UserDefaults.standard.bool(forKey: Self.allowDisplaySleepKey)
-    }
+    private var allowDisplaySleep: Bool { UserDefaults.standard.allowDisplaySleep }
 
     init() {
-        let center = NotificationCenter.default
-        observers.append(center.addObserver(
-            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reapplyIfActive() }
-        })
-        observers.append(center.addObserver(
-            forName: Notification.Name("NSApplicationWillTerminateNotification"), object: nil, queue: .main
+        defaultsObservation = UserDefaults.standard.observe(\.allowDisplaySleep) { [weak self] _, _ in
+            Task { @MainActor in self?.syncDisplaySleep() }
+        }
+        observers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.deactivate() }
+        })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.expireIfDue() }
         })
         #if DEBUG
         // Headless testing: launch with `-activateOnLaunch YES`.
@@ -40,9 +49,11 @@ final class AwakeController {
     }
 
     var assertionHeld: Bool { assertion.isActive }
+    var assertionPreventsDisplaySleep: Bool { assertion.preventsDisplaySleep }
 
     /// Activates immediately. `duration` nil means indefinitely.
     func activate(for duration: TimeInterval? = nil) {
+        stopTimers()
         guard assertion.activate(reason: "Keeping the Mac awake", preventDisplaySleep: !allowDisplaySleep) else {
             deactivate()
             return
@@ -50,25 +61,14 @@ final class AwakeController {
         isActive = true
         now = Date()
         endDate = duration.map { Date().addingTimeInterval($0) }
-        expiryTimer?.invalidate()
-        tickTimer?.invalidate()
-        expiryTimer = nil
-        tickTimer = nil
         if let duration {
-            expiryTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-                MainActor.assumeIsolated { self?.deactivate() }
-            }
-            tickTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.now = Date() }
-            }
+            expiryTimer = schedule(after: duration, repeats: false) { $0.expireIfDue() }
+            tickTimer = schedule(after: 15, repeats: true) { $0.now = Date(); $0.expireIfDue() }
         }
     }
 
     func deactivate() {
-        expiryTimer?.invalidate()
-        tickTimer?.invalidate()
-        expiryTimer = nil
-        tickTimer = nil
+        stopTimers()
         assertion.deactivate()
         endDate = nil
         isActive = false
@@ -89,14 +89,32 @@ final class AwakeController {
         return "\(minutes) min left"
     }
 
-    // Re-create the assertion when "Allow Display Sleep" changes, keeping the existing timer.
-    private var appliedAllowDisplaySleep: Bool?
-    private func reapplyIfActive() {
+    /// Makes the live assertion match the current preference; the assertion itself is the source of truth.
+    func syncDisplaySleep() {
         guard isActive else { return }
-        let current = allowDisplaySleep
-        if appliedAllowDisplaySleep == nil { appliedAllowDisplaySleep = current }
-        guard current != appliedAllowDisplaySleep else { return }
-        appliedAllowDisplaySleep = current
-        assertion.activate(reason: "Keeping the Mac awake", preventDisplaySleep: !current)
+        let wantsDisplay = !allowDisplaySleep
+        guard assertion.preventsDisplaySleep != wantsDisplay else { return }
+        if !assertion.setPreventDisplaySleep(wantsDisplay) { deactivate() }
+    }
+
+    private func expireIfDue() {
+        if let endDate, endDate <= Date() { deactivate() }
+    }
+
+    private func schedule(after interval: TimeInterval, repeats: Bool,
+                          _ fire: @escaping @MainActor (AwakeController) -> Void) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats) { [weak self] _ in
+            MainActor.assumeIsolated { if let self { fire(self) } }
+        }
+        // .common keeps timers firing while the menu is open (event-tracking mode).
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
+    private func stopTimers() {
+        expiryTimer?.invalidate()
+        tickTimer?.invalidate()
+        expiryTimer = nil
+        tickTimer = nil
     }
 }
