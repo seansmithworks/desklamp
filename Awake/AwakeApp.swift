@@ -20,15 +20,6 @@ struct AwakeApp: App {
         ("5 hours", 5 * 60 * 60),
     ]
 
-    init() {
-        #if DEBUG
-        // Headless testing: launch with `-activateOnLaunch YES`.
-        if UserDefaults.standard.bool(forKey: "activateOnLaunch") {
-            _controller.wrappedValue.activate()
-        }
-        #endif
-    }
-
     var body: some Scene {
         MenuBarExtra {
             Button(toggleTitle) { controller.toggle() }

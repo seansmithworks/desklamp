@@ -33,6 +33,10 @@ final class AwakeController {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.deactivate() }
         })
+        #if DEBUG
+        // Headless testing: launch with `-activateOnLaunch YES`.
+        if UserDefaults.standard.bool(forKey: "activateOnLaunch") { activate() }
+        #endif
     }
 
     var assertionHeld: Bool { assertion.isActive }
