@@ -8,6 +8,8 @@ description: Verify the Awake macOS menu bar keep-awake app (AppKit NSStatusItem
 Surface: macOS menu bar app (LSUIElement, no Dock icon, no window). Driver: `.claude/skills/verify/run.sh`. Evidence dir: `/tmp/verify-awake-<hash>/` (printed by `up`).
 
 ## Launch
+Single-instance by design: `up` records the path of any other running Awake (e.g. the installed `/Applications/Awake.app`), quits it, and `down` relaunches it. All assertion checks are scoped to the test pid.
+
 `.claude/skills/verify/run.sh up` regenerates the project (`xcodegen generate`), builds scheme `Awake` Debug into the evidence dir's DerivedData, and launches that exact `.app` with `-activateOnLaunch YES`. Prints `UP pid=...`.
 
 ## Doctor

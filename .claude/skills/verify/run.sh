@@ -15,6 +15,14 @@ case "${1:-}" in
 up)
   ( cd "$REPO" && git status --porcelain ) > "$EV/git-status.before"
   [ -n "$(ours_pid)" ] && { echo "FAIL: our Awake already running (pid $(ours_pid)); run down first"; exit 1; }
+  # Single-instance by design: record and quit any other Awake; `down` relaunches it.
+  : > "$EV/prior-apps"
+  for q in $(pgrep -x Awake); do
+    ps -p "$q" -o command= | sed 's#/Contents/MacOS/Awake.*##' >> "$EV/prior-apps"
+    kill "$q"
+  done
+  for i in $(seq 1 20); do pgrep -x Awake >/dev/null || break; sleep 0.25; done
+  pgrep -x Awake >/dev/null && { echo "FAIL: could not quit the running Awake"; exit 1; }
   ( cd "$REPO" && xcodegen generate ) > "$EV/xcodegen.log" 2>&1 || { echo "FAIL: xcodegen, see $EV/xcodegen.log"; exit 1; }
   ( cd "$REPO" && xcodebuild -scheme Awake -configuration Debug -derivedDataPath "$EV/DerivedData" build ) > "$EV/build.log" 2>&1
   grep -q "BUILD SUCCEEDED" "$EV/build.log" || { echo "FAIL: build, see $EV/build.log"; exit 1; }
@@ -37,7 +45,7 @@ toggle)
   # Plain left-click on the status item: toggles keep-awake. Prints the Awake assertion count after (0 = off).
   osascript -e 'tell application "System Events" to tell process "Awake" to click menu bar item 1 of menu bar 2' > "$EV/osascript.log" 2>&1 \
     || { echo "BLOCKED: click failed: $(cat "$EV/osascript.log")"; exit 2; }
-  sleep 1; echo "ASSERTIONS $(pmset -g assertions | grep -c '(Awake)')"
+  sleep 1; echo "ASSERTIONS $(pmset -g assertions | grep -c "pid $(cat "$PIDF")(Awake)")"
   ;;
 menu)
   # Control-click on the status item (AXShowMenu does nothing here), list the menu items, then close it.
@@ -67,7 +75,10 @@ down)
   fi
   [ -z "$(ours_pid)" ] || { echo "FAIL: still running"; exit 1; }
   pmset -g assertions > "$EV/assertions.after.txt"
-  if grep -q "(Awake)" "$EV/assertions.after.txt"; then echo "FAIL: Awake assertion remains"; exit 1; fi
+  if grep -q "pid ${P:-0}(Awake)" "$EV/assertions.after.txt"; then echo "FAIL: Awake assertion remains"; exit 1; fi
+  # Relaunch whatever was running before `up`.
+  while IFS= read -r a; do [ -n "$a" ] && open "$a" && echo "RELAUNCHED $a"; done < "$EV/prior-apps" 2>/dev/null
+  : > "$EV/prior-apps"
   ( cd "$REPO" && git status --porcelain ) > "$EV/git-status.after"
   diff -q "$EV/git-status.before" "$EV/git-status.after" >/dev/null 2>&1 && echo "DOWN clean, no drift, no Awake assertions" || echo "DOWN ok, but git status drift (see $EV/git-status.*)"
   ;;
