@@ -33,6 +33,7 @@ targets:
       - AwakeTests
       - Awake/SleepAssertion.swift
       - Awake/AwakeController.swift
+      - Awake/LampStage.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.seansmith.awake.tests

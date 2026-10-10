@@ -17,6 +17,12 @@ final class AwakeController {
     private(set) var isActive = false
     /// Nil means indefinite.
     private(set) var endDate: Date?
+    /// Beam aging for the menu bar lamp; nil while inactive.
+    private(set) var lampStage: LampStage?
+
+    /// When the current activation began; reset on deactivate.
+    @ObservationIgnored private var activatedAt: Date?
+    @ObservationIgnored private var stageTimer: Timer?
 
     @ObservationIgnored private let assertion = SleepAssertion()
     @ObservationIgnored private var expiryTimer: Timer?
@@ -38,7 +44,10 @@ final class AwakeController {
         observers.append(NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.expireIfDue() }
+            MainActor.assumeIsolated {
+                self?.expireIfDue()
+                self?.updateLampStage()
+            }
         })
         #if DEBUG
         // Headless testing: launch with `-activateOnLaunch YES`.
@@ -53,8 +62,12 @@ final class AwakeController {
             deactivate()
             return
         }
+        if !isActive { activatedAt = Date() }
         isActive = true
         endDate = duration.map { Date().addingTimeInterval($0) }
+        updateLampStage()
+        // Low-frequency tick so the icon ages with the menu closed.
+        stageTimer = schedule(after: 60, repeats: true) { $0.updateLampStage() }
         if let duration {
             expiryTimer = schedule(after: duration, repeats: false) { $0.expireIfDue() }
             tickTimer = schedule(after: 15, repeats: true) { $0.expireIfDue() }
@@ -65,7 +78,9 @@ final class AwakeController {
         stopTimers()
         assertion.deactivate()
         endDate = nil
+        activatedAt = nil
         isActive = false
+        updateLampStage()
     }
 
     func toggle() {
@@ -91,6 +106,11 @@ final class AwakeController {
         if !assertion.setPreventDisplaySleep(wantsDisplay) { deactivate() }
     }
 
+    private func updateLampStage() {
+        let stage = activatedAt.map { LampStage.for(elapsed: Date().timeIntervalSince($0)) }
+        if stage != lampStage { lampStage = stage }
+    }
+
     private func expireIfDue() {
         if let endDate, endDate <= Date() { deactivate() }
     }
@@ -108,7 +128,9 @@ final class AwakeController {
     private func stopTimers() {
         expiryTimer?.invalidate()
         tickTimer?.invalidate()
+        stageTimer?.invalidate()
         expiryTimer = nil
         tickTimer = nil
+        stageTimer = nil
     }
 }

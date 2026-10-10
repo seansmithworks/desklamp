@@ -31,17 +31,16 @@ final class StatusItemController: NSObject, NSApplicationDelegate, NSMenuDelegat
 
     // MARK: Icon
 
-    /// Template SF Symbol, so the system tints it for light/dark menu bars.
+    /// Template desk lamp, so the system tints it for light/dark menu bars.
     private func updateIcon() {
         let active = controller.isActive
-        let image = NSImage(
-            systemSymbolName: active ? "cup.and.saucer.fill" : "cup.and.saucer",
-            accessibilityDescription: nil)
-        image?.isTemplate = true
-        statusItem.button?.image = image
+        statusItem.button?.image = LampIcon.image(for: active ? controller.lampStage : nil)
         statusItem.button?.setAccessibilityLabel("\(Self.appName): \(active ? "on" : "off")")
         // Re-arm: observation tracking fires once per change.
-        withObservationTracking { _ = controller.isActive } onChange: { [weak self] in
+        withObservationTracking {
+            _ = controller.isActive
+            _ = controller.lampStage
+        } onChange: { [weak self] in
             Task { @MainActor in self?.updateIcon() }
         }
     }
