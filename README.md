@@ -8,13 +8,15 @@ A tiny macOS menu bar app that keeps your Mac awake. The menu bar icon is a desk
 
 ## Install
 
-1. Download Desklamp from the [GitHub Releases page](https://github.com/seansmithworks/desklamp/releases). A prebuilt release is coming soon. Until then, [build from source](#build-from-source).
+1. Download [Desklamp-1.0.dmg](https://github.com/seansmithworks/desklamp/releases/latest/download/Desklamp-1.0.dmg), or grab the zip from the [Releases page](https://github.com/seansmithworks/desklamp/releases/latest), or [build from source](#build-from-source).
 2. Drag Desklamp.app to Applications.
 3. On first launch, macOS blocks the app because it isn't notarized. Open System Settings › Privacy & Security, scroll down, and click Open Anyway. In the dialog that follows, click Open Anyway again and enter your password.
 
    ![First launch: Open Anyway in System Settings](docs/images/open-anyway.gif)
 
 4. Look for the lamp in the menu bar. Click it to keep your Mac awake. Right-click for timers and Launch at Login.
+
+Or install from the terminal: `npx @seansmithworks/desklamp`
 
 No permissions. No network. Nothing collected.
 
