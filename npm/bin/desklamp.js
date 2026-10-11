@@ -15,9 +15,10 @@ const CUSTOM_DIR = process.env.DESKLAMP_INSTALL_DIR;
 const INSTALL_DIR = CUSTOM_DIR || '/Applications';
 const NO_RELEASE = `No Desklamp release yet. See ${REPO}`;
 
+// Failures are thrown, never process.exit'd, so main()'s finally always runs cleanup.
+class InstallError extends Error {}
 function fail(msg) {
-  console.error(msg);
-  process.exit(1);
+  throw new InstallError(msg);
 }
 
 function get(url, redirects = 0) {
@@ -55,29 +56,26 @@ function quitApp() {
 async function main() {
   if (process.platform !== 'darwin') fail('Desklamp is for macOS only.');
 
-  console.log('Downloading Desklamp.zip...');
-  const zip = await get(`${BASE}/Desklamp.zip`);
-  if (!zip) fail(NO_RELEASE);
-  console.log('Downloading SHA256SUMS...');
-  const sums = await get(`${BASE}/SHA256SUMS`);
-  if (!sums) fail(NO_RELEASE);
-
-  console.log('Verifying checksum...');
-  const line = sums.toString().split('\n').find((l) => l.trim().split(/\s+/)[1] === 'Desklamp.zip');
-  if (!line) fail('SHA256SUMS has no entry for Desklamp.zip; aborting.');
-  const expected = line.trim().split(/\s+/)[0].toLowerCase();
-  const actual = crypto.createHash('sha256').update(zip).digest('hex');
-  if (actual !== expected) fail(`Checksum mismatch (expected ${expected}, got ${actual}); aborting.`);
-
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'desklamp-'));
   const NEW = path.join(INSTALL_DIR, '.Desklamp.app.new');
   const OLD = path.join(INSTALL_DIR, '.Desklamp.app.old');
   const DEST = path.join(INSTALL_DIR, 'Desklamp.app');
-  const cleanup = () => {
-    fs.rmSync(work, { recursive: true, force: true });
-    fs.rmSync(NEW, { recursive: true, force: true });
-  };
+  let work = null;
   try {
+    console.log('Downloading Desklamp.zip...');
+    const zip = await get(`${BASE}/Desklamp.zip`);
+    if (!zip) fail(NO_RELEASE);
+    console.log('Downloading SHA256SUMS...');
+    const sums = await get(`${BASE}/SHA256SUMS`);
+    if (!sums) fail(NO_RELEASE);
+
+    console.log('Verifying checksum...');
+    const line = sums.toString().split('\n').find((l) => l.trim().split(/\s+/)[1] === 'Desklamp.zip');
+    if (!line) fail('SHA256SUMS has no entry for Desklamp.zip; aborting.');
+    const expected = line.trim().split(/\s+/)[0].toLowerCase();
+    const actual = crypto.createHash('sha256').update(zip).digest('hex');
+    if (actual !== expected) fail(`Checksum mismatch (expected ${expected}, got ${actual}); aborting.`);
+
+    work = fs.mkdtempSync(path.join(os.tmpdir(), 'desklamp-'));
     fs.writeFileSync(path.join(work, 'Desklamp.zip'), zip);
     console.log('Unpacking...');
     execFileSync('ditto', ['-x', '-k', path.join(work, 'Desklamp.zip'), work]);
@@ -95,15 +93,21 @@ async function main() {
     fs.rmSync(OLD, { recursive: true, force: true });
     execFileSync('ditto', [unpacked, NEW]);
     if (fs.existsSync(DEST)) fs.renameSync(DEST, OLD);
-    try {
-      fs.renameSync(NEW, DEST);
-    } catch (e) {
-      if (fs.existsSync(OLD)) fs.renameSync(OLD, DEST);
-      fail('Install failed; previous version restored.');
-    }
+    // Test-only hook (requires DESKLAMP_INSTALL_DIR): fail mid-swap to exercise rollback.
+    if (CUSTOM_DIR && process.env.DESKLAMP_TEST_FAIL_MIDSWAP) throw new Error('simulated mid-swap failure');
+    fs.renameSync(NEW, DEST);
     fs.rmSync(OLD, { recursive: true, force: true });
   } finally {
-    cleanup();
+    // Runs on every path: temp download, staged .new, and a rollback if the swap died midway.
+    if (work) fs.rmSync(work, { recursive: true, force: true });
+    fs.rmSync(NEW, { recursive: true, force: true });
+    if (fs.existsSync(OLD)) {
+      if (fs.existsSync(DEST)) fs.rmSync(OLD, { recursive: true, force: true });
+      else {
+        fs.renameSync(OLD, DEST);
+        console.error('Install failed; previous version restored.');
+      }
+    }
   }
 
   if (process.env.DESKLAMP_NO_OPEN) {
@@ -114,4 +118,7 @@ async function main() {
   }
 }
 
-main().catch((e) => fail(`Install failed: ${e.message}`));
+main().catch((e) => {
+  console.error(e instanceof InstallError ? e.message : `Install failed: ${e.message}`);
+  process.exitCode = 1;
+});
