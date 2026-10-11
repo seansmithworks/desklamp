@@ -1,0 +1,23 @@
+{
+  "name": "@seansmithworks/desklamp",
+  "version": "1.0.0",
+  "description": "Installs Desklamp, a macOS menu bar app that keeps your Mac awake.",
+  "license": "MIT",
+  "author": "Sean Smith",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/seansmithworks/desklamp.git"
+  },
+  "homepage": "https://github.com/seansmithworks/desklamp",
+  "bin": {
+    "desklamp": "bin/desklamp.js"
+  },
+  "os": ["darwin"],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": ["bin", "README.md"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -6,3 +6,4 @@ xcuserdata/
 *.xcodeproj
 BACKLOG.md
 brag-output/
+dist/
