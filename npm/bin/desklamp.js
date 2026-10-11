@@ -10,8 +10,12 @@ const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 
 const REPO = 'https://github.com/seansmithworks/desklamp';
-const BASE = process.env.DESKLAMP_RELEASE_BASE || `${REPO}/releases/latest/download`;
 const CUSTOM_DIR = process.env.DESKLAMP_INSTALL_DIR;
+// Test-only: the release base override is honored only alongside DESKLAMP_INSTALL_DIR.
+// A real /Applications install always downloads from GitHub over https.
+const OVERRIDE = Boolean(CUSTOM_DIR && process.env.DESKLAMP_RELEASE_BASE);
+const BASE = OVERRIDE ? process.env.DESKLAMP_RELEASE_BASE : `${REPO}/releases/latest/download`;
+const TIMEOUT_MS = 30000;
 const INSTALL_DIR = CUSTOM_DIR || '/Applications';
 const NO_RELEASE = `No Desklamp release yet. See ${REPO}`;
 
@@ -21,21 +25,27 @@ function fail(msg) {
   throw new InstallError(msg);
 }
 
-function get(url, redirects = 0) {
+function get(url, redirects = 0, strict = !OVERRIDE) {
   return new Promise((resolve, reject) => {
     const lib = url.startsWith('http:') ? http : https;
-    lib.get(url, { headers: { 'User-Agent': 'desklamp-installer' } }, (res) => {
+    const req = lib.get(url, { headers: { 'User-Agent': 'desklamp-installer' } }, (res) => {
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
         res.resume();
-        if (redirects > 10) return reject(new Error('Too many redirects'));
-        return resolve(get(new URL(res.headers.location, url).href, redirects + 1));
+        if (redirects > 10) return reject(new InstallError('Too many redirects'));
+        const next = new URL(res.headers.location, url);
+        if (strict && next.protocol !== 'https:') {
+          return reject(new InstallError(`Refusing redirect to non-https URL (${next.href}); aborting.`));
+        }
+        return resolve(get(next.href, redirects + 1, strict));
       }
       if (res.statusCode === 404) { res.resume(); return resolve(null); }
       if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} from ${url}`)); }
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
       res.on('end', () => resolve(Buffer.concat(chunks)));
-    }).on('error', reject);
+    });
+    req.setTimeout(TIMEOUT_MS, () => req.destroy(new InstallError(`Timed out after ${TIMEOUT_MS / 1000}s fetching ${url}; aborting.`)));
+    req.on('error', reject);
   });
 }
 
@@ -66,7 +76,7 @@ async function main() {
     if (!zip) fail(NO_RELEASE);
     console.log('Downloading SHA256SUMS...');
     const sums = await get(`${BASE}/SHA256SUMS`);
-    if (!sums) fail(NO_RELEASE);
+    if (!sums) fail('Release is missing SHA256SUMS; aborting.');
 
     console.log('Verifying checksum...');
     const line = sums.toString().split('\n').find((l) => l.trim().split(/\s+/)[1] === 'Desklamp.zip');
@@ -118,7 +128,11 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e instanceof InstallError ? e.message : `Install failed: ${e.message}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e instanceof InstallError ? e.message : `Install failed: ${e.message}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { get };
