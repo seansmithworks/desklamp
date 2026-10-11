@@ -2,8 +2,8 @@
 # Build Release and install to /Applications (ad-hoc signed, for this Mac only).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-NEW=/Applications/.Lamplight.app.new
-OLD=/Applications/.Lamplight.app.old
+NEW=/Applications/.Desklamp.app.new
+OLD=/Applications/.Desklamp.app.old
 trap 'rm -rf "$NEW"' EXIT
 
 # Quit a running app by process name; fail if it won't exit.
@@ -14,20 +14,22 @@ quit_app() {
 }
 
 xcodegen generate
-xcodebuild -project Lamplight.xcodeproj -scheme Lamplight -configuration Release -derivedDataPath build -quiet build
-quit_app Lamplight
+xcodebuild -project Desklamp.xcodeproj -scheme Desklamp -configuration Release -derivedDataPath build -quiet build
+quit_app Desklamp
 rm -rf "$NEW" "$OLD"
-ditto build/Build/Products/Release/Lamplight.app "$NEW"
-[ -d /Applications/Lamplight.app ] && mv /Applications/Lamplight.app "$OLD"
-if ! mv "$NEW" /Applications/Lamplight.app; then
-  [ -d "$OLD" ] && mv "$OLD" /Applications/Lamplight.app
+ditto build/Build/Products/Release/Desklamp.app "$NEW"
+[ -d /Applications/Desklamp.app ] && mv /Applications/Desklamp.app "$OLD"
+if ! mv "$NEW" /Applications/Desklamp.app; then
+  [ -d "$OLD" ] && mv "$OLD" /Applications/Desklamp.app
   echo "install failed; previous version restored" >&2
   exit 1
 fi
 rm -rf "$OLD"
 
-# Lamplight was previously named Awake; retire that build only now that Lamplight is in place.
+# Desklamp was previously named Lamplight (and before that Awake); retire those builds only now that Desklamp is in place.
+quit_app Lamplight
+rm -rf /Applications/Lamplight.app
 quit_app Awake
 rm -rf /Applications/Awake.app
 
-open /Applications/Lamplight.app
+open /Applications/Desklamp.app

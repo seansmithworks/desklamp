@@ -21,7 +21,7 @@ final class SleepAssertionTests: XCTestCase {
 
     func testActivateCreatesAndDeactivateReleases() {
         let a = SleepAssertion()
-        XCTAssertTrue(a.activate(reason: "LamplightTests", preventDisplaySleep: true))
+        XCTAssertTrue(a.activate(reason: "DesklampTests", preventDisplaySleep: true))
         XCTAssertEqual(system, 1); XCTAssertEqual(display, 1)
         a.deactivate()
         XCTAssertEqual(system, 0); XCTAssertEqual(display, 0)
@@ -29,8 +29,8 @@ final class SleepAssertionTests: XCTestCase {
 
     func testReactivateDoesNotLeak() {
         let a = SleepAssertion()
-        a.activate(reason: "LamplightTests", preventDisplaySleep: true)
-        a.activate(reason: "LamplightTests", preventDisplaySleep: true)
+        a.activate(reason: "DesklampTests", preventDisplaySleep: true)
+        a.activate(reason: "DesklampTests", preventDisplaySleep: true)
         XCTAssertEqual(system, 1); XCTAssertEqual(display, 1)
         a.deactivate()
     }

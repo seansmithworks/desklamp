@@ -9,7 +9,7 @@ final class StatusItemController: NSObject, NSApplicationDelegate, NSMenuDelegat
     private let menu = NSMenu()
 
     private static let appName =
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Lamplight"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Desklamp"
 
     private static let durations: [(String, TimeInterval?)] = [
         ("Indefinitely", nil),

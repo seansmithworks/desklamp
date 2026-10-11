@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct LamplightApp: App {
+struct DesklampApp: App {
     @NSApplicationDelegateAdaptor(StatusItemController.self) private var statusItemController
 
     // The status item lives in AppKit (MenuBarExtra can't tell a click from a right-click).

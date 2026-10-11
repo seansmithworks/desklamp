@@ -1,10 +1,10 @@
-# Lamplight
+# Desklamp
 
-<img src="design/app-icon/final/final-C.png" width="128" alt="Lamplight app icon">
+<img src="design/app-icon/final/final-C.png" width="128" alt="Desklamp app icon">
 
 A tiny macOS menu bar app that keeps your Mac awake. The menu bar icon is a desk lamp whose beam ages over a long session: it dims after 3 hours and breaks up into flickering bands after 6 hours.
 
-![Lamplight in the menu bar](design/app-icon/final/menubar-lamplight.png)
+![Desklamp in the menu bar](design/app-icon/final/menubar-desklamp.png)
 
 ## Features
 
@@ -25,7 +25,7 @@ brew install xcodegen
 xcodegen generate
 ```
 
-Then open `Lamplight.xcodeproj` in Xcode, or run:
+Then open `Desklamp.xcodeproj` in Xcode, or run:
 
 ```sh
 scripts/install.sh
@@ -39,7 +39,7 @@ Builds are not notarized. If you download a prebuilt copy, macOS blocks the firs
 
 ## How it works
 
-Lamplight holds an IOKit `PreventUserIdleSystemSleep` power assertion, plus a display-sleep assertion unless Allow Display Sleep is on. The app is sandboxed, has no network access, and collects nothing.
+Desklamp holds an IOKit `PreventUserIdleSystemSleep` power assertion, plus a display-sleep assertion unless Allow Display Sleep is on. The app is sandboxed, has no network access, and collects nothing.
 
 ## Credits
 
