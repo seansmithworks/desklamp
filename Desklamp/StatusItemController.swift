@@ -7,6 +7,7 @@ final class StatusItemController: NSObject, NSApplicationDelegate, NSMenuDelegat
     private let controller = AwakeController()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private let firstLaunchHint = FirstLaunchHint()
 
     private static let appName =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Desklamp"
@@ -27,6 +28,7 @@ final class StatusItemController: NSObject, NSApplicationDelegate, NSMenuDelegat
         statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateIcon()
+        firstLaunchHint.showIfNeeded(from: statusItem.button)
     }
 
     // MARK: Icon
