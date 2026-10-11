@@ -192,7 +192,7 @@ smooth(shade)
 lip = shade.modifiers.new("Sub", "SUBSURF"); lip.levels = 1; lip.render_levels = 2
 link(shade, C_LAMP); P(shade)
 # rounded back cap + knob (the little handle on the symbol's shade)
-P(sphere(neck, r_neck * 1.02, PAINT, C_LAMP))
+cap = P(sphere(neck, r_neck * 1.02, PAINT, C_LAMP))
 back = neck - d * 0.12
 knob_dir = Vector((-0.75, 0, 1.0)).normalized()
 P(cyl(neck, neck + knob_dir * 0.30, 0.03, PAINT, C_LAMP))
@@ -445,9 +445,10 @@ if args.passes:
 
     # 1. background: desk + backdrop exactly as lit in the beauty render. The lamp stays in the scene as an
     #    invisible light-blocker (shade bounds the bulb, base casts its contact shadow), hidden from camera
-    #    only. Camera rays then reach the never-lit desk patch under the base disc (a black hole), so a
-    #    second render with the base disc's shadow off supplies the pixels wherever the foreground lamp
-    #    is opaque; the contact shadow around the base is kept from the first render.
+    #    only. Camera rays then reach desk that the lamp body shadows (base, post, hubs, arms: a black
+    #    patch under the base), so a second render where only the shade still blocks light (it must, or
+    #    the spot spills past the lip) supplies the pixels wherever the foreground lamp is opaque; the
+    #    contact shadow around the base is kept from the first render.
     import numpy as np
     lc["Beam"].exclude = True
     lamp_objs = list(C_LAMP.objects)
@@ -456,11 +457,14 @@ if args.passes:
     bgp = os.path.join(args.passes, "pass-background.png")
     bg2p = os.path.join(args.passes, "_bg-nobaseshadow.png")
     render(bgp, args.pass_samples, transparent=False)
-    for o in base_parts:
-        o.visible_shadow = False
+    light_blockers = {shade, cap, socket}
+    saved_shadow = {o: o.visible_shadow for o in lamp_objs}
+    for o in lamp_objs:
+        if o not in light_blockers:
+            o.visible_shadow = False
     render(bg2p, args.pass_samples, transparent=False)
-    for o in base_parts:
-        o.visible_shadow = True
+    for o, v in saved_shadow.items():
+        o.visible_shadow = v
 
     # 2. foreground: lamp only on transparent film; env held out (still bounces warm light onto the lamp)
     for o in lamp_objs:
