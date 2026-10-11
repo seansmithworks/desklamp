@@ -31,7 +31,7 @@ scan_dir() {
     hits=$(grep -raoiF "$HOST" "$dir" 2>/dev/null || true)
     [ -n "$hits" ] && report "$label contains hostname '$HOST'"
   fi
-  hits=$(grep -raoE '[A-Za-z0-9._%+-]{3,}@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}' "$dir" 2>/dev/null | grep -viE 'noreply' || true)
+  hits=$(grep -raoE '[A-Za-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}' "$dir" 2>/dev/null | grep -viE 'noreply|@[0-9]+x\.(png|jpe?g|gif|pdf|svg|heic|car)$' || true)
   [ -n "$hits" ] && report "$label contains email addresses:" && echo "$hits" | sort -u | head -10 >&2
   return 0
 }
@@ -84,6 +84,9 @@ else
       targets+=("$WORK/npm-x")
     fi
   fi
+  for t in "${targets[@]}"; do
+    [ -e "$t" ] || { echo "privacy-check: target not found: $t" >&2; exit 2; }
+  done
   for t in "${targets[@]}"; do scan_target "$t"; done
 fi
 
