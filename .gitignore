@@ -7,3 +7,12 @@ xcuserdata/
 BACKLOG.md
 brag-output/
 dist/
+.env*
+*.pem
+*.p12
+*.key
+*.mobileprovision
+.npmrc
+node_modules/
+.claude/worktrees/
+.claude/settings.local.json
