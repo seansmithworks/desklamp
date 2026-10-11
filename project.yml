@@ -10,7 +10,13 @@ targets:
   Lamplight:
     type: application
     platform: macOS
-    sources: [Lamplight]
+    sources:
+      - path: Lamplight
+        excludes: [AppIcon.icon]
+      # Icon Composer document (macOS 26+); Assets.xcassets/AppIcon.appiconset is the pre-26 fallback.
+      - path: Lamplight/AppIcon.icon
+        type: file
+        buildPhase: resources
     info:
       path: Lamplight/Info.plist
       properties:
