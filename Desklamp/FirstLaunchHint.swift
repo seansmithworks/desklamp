@@ -25,8 +25,8 @@ final class FirstLaunchHint {
     /// Shows the hint anchored to `button` once, then records that it was shown.
     func showIfNeeded(from button: NSStatusBarButton?) {
         guard Self.shouldShow(), let button else { return }
-        // The status item has no window until the next runloop pass.
-        DispatchQueue.main.async { [weak self] in
+        // Popover.show fails silently if run before the status item is positioned in the menu bar.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self, button.window != nil else { return }
             UserDefaults.standard.hasShownFirstLaunchHint = true
 
@@ -43,14 +43,15 @@ final class FirstLaunchHint {
             controller.view = content
 
             self.popover.contentViewController = controller
-            self.popover.behavior = .transient
+            self.popover.behavior = .applicationDefined
             NSApp.activate(ignoringOtherApps: true)
             self.popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             self.watchForClicks()
         }
     }
 
-    /// `.transient` alone misses clicks for an accessory app, so watch every mouse-down.
+    /// `.transient` swallows the first click on the status item and misses outside clicks for an accessory app,
+    /// so the popover is application-defined and closed from these mouse-down monitors instead.
     /// The local monitor passes events through, so a click on the status item still toggles.
     private func watchForClicks() {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
