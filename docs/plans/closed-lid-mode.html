@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Closed-lid mode plan</title>
+    <style>
+:root{--bg:#fbfaf7;--fg:#1d1d1f;--mut:#6e6e73;--line:#e3e1dc;--acc:#b8860b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1c1e;--fg:#f2f2f7;--mut:#a1a1a6;--line:#38383a;--acc:#e0b04a}}
+:root[data-theme="dark"]{--bg:#1c1c1e;--fg:#f2f2f7;--mut:#a1a1a6;--line:#38383a;--acc:#e0b04a}
+table{display:block;overflow-x:auto}
+body{background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 16px}
+h1{font-size:28px;margin-bottom:4px}h2{margin-top:36px;border-top:1px solid var(--line);padding-top:20px}
+.doc-meta{color:var(--mut);font-size:13px;display:flex;gap:12px;margin-bottom:20px}
+.badge{border:1px solid var(--acc);color:var(--acc);border-radius:10px;padding:0 8px}
+.callout{border-left:3px solid var(--acc);margin:0;padding:4px 18px;background:color-mix(in srgb,var(--acc) 7%,transparent)}
+li{margin:6px 0}code{font-size:13px;background:color-mix(in srgb,var(--fg) 8%,transparent);padding:1px 4px;border-radius:4px}
+details{margin-top:20px}summary{cursor:pointer;color:var(--mut)}table{border-collapse:collapse;font-size:14px;margin-top:10px}
+td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+</style>
+  </head>
+  <body>
+    <h1>Closed-lid mode for Desklamp</h1>
+    <div class="doc-meta">
+      <span>Project: Desklamp</span>
+      <span>2026-10-14</span>
+      <span class="badge badge--draft">Reviewed plan, awaiting go</span>
+    </div>
+
+    <blockquote class="callout" data-anchor-id="answer">
+      <p>
+        <strong>Plan:</strong> ship this in three steps, each of which can stop
+        the work before it costs much.
+      </p>
+      <ol>
+        <li>
+          <strong>Notarize Desklamp (v1.1).</strong> Sign it with your Developer
+          ID and get it notarized by Apple. That removes the "Open Anyway" step
+          for every new user, and it ships on its own. About half a day, plus
+          one keychain command you run yourself.
+        </li>
+        <li>
+          <strong>Spike (one throwaway day).</strong> Prove that a sandboxed,
+          signed Desklamp can install a root helper and talk to it. Also prove
+          that the Mac really does sleep when protection is withdrawn with the
+          lid already closed. If either fails, you get a decision, not a
+          workaround.
+        </li>
+        <li>
+          <strong>Closed-lid mode (v1.2).</strong> An opt-in menu checkbox,
+          plugged in only. A root helper holds the setting under a 30-second
+          heartbeat. Any safety stop holds until you turn the mode back on.
+          Several days, plus a review.
+        </li>
+      </ol>
+      <p>
+        <strong>What the review changed:</strong> it found that the 4-hour and
+        battery limits would have quietly re-armed 10 seconds after firing. It
+        also caught the missing helper-update path and a source build that would
+        have broken. All three are fixed below.
+      </p>
+    </blockquote>
+
+    <h2 id="decisions">Your calls</h2>
+    <ol data-anchor-id="decisions">
+      <li>
+        <strong>Plugged-in only for v1?</strong> Recommended: yes. Closed-lid
+        mode turns off the moment you unplug, so a Mac never runs closed in a
+        bag on battery. Battery support with a charge floor can come later if
+        people ask.
+      </li>
+      <li>
+        <strong
+          >If the spike shows the sandbox blocks the helper, drop the
+          sandbox?</strong
+        >
+        Recommended: decide after the spike. Dropping it changes the "No
+        permissions" and "sandboxed" promises (README lines 21 and 52, npm
+        README line 26) for every user, not only those who turn the mode on.
+      </li>
+      <li>
+        <strong
+          >4-hour hard cap on closed-lid, even with "Indefinitely"?</strong
+        >
+        Recommended: yes. When it fires, only the lid behavior goes back to
+        normal. The Mac still stays awake while the lid is open.
+      </li>
+      <li>
+        <strong>Menu wording.</strong> Strawman: a checkbox labeled "Keep Awake
+        with Lid Closed" under Allow Display Sleep. When a safety stop fires,
+        one gray line under it says why, for example "Lid mode stopped:
+        unplugged".
+      </li>
+    </ol>
+
+    <h2 id="steps">Steps</h2>
+    <h3>Phase A: Notarize (v1.1)</h3>
+    <ol data-anchor-id="phase-a">
+      <li>
+        <strong>Check the account first.</strong> You run
+        <code>xcrun notarytool store-credentials desklamp-notary</code> once.
+        Then a throwaway submit proves the certificate and its key work, and
+        that the account's agreements are signed.
+      </li>
+      <li>
+        <strong>Sign only in <code>scripts/package.sh</code>.</strong> The
+        Developer ID identity, team and hardened runtime are passed as build
+        overrides there. <code>project.yml</code> stays ad-hoc, so the public
+        "Build from source" path still works for anyone without an account.
+      </li>
+      <li>
+        <strong>Fix the packaging order.</strong> Notarize and staple the app
+        first. Then build the zip and DMG from the stapled app, notarize and
+        staple the DMG, and write SHA256SUMS last. The ad-hoc re-sign at
+        <code>package.sh:28-31</code> becomes a Developer ID re-sign: helper first, then the app, never <code>--deep</code>.
+      </li>
+      <li>
+        <strong>Update the copy.</strong> Drop the Open Anyway step and GIF
+        (<code>README.md:13-15</code>) and the ad-hoc wording
+        (<code>README.md:48</code>, <code>npm/README.md:22</code>).
+      </li>
+    </ol>
+
+    <h3>Phase B0: Spike (throwaway branch)</h3>
+    <ul data-anchor-id="spike">
+      <li>
+        <strong>Helper round-trip.</strong> A signed, sandboxed build registers
+        a trivial root helper and makes one call to it on macOS 14 and on this Mac's OS. If the direct connection fails, the next try is the route Apple recommends: move the connection into a small XPC service inside the app bundle, so the sandbox exception stays out of the main app. Dropping the sandbox is the last resort.
+      </li>
+      <li>
+        <strong>Sleep after withdrawal.</strong> With the lid closed, clearing
+        the setting must actually put the Mac to sleep:
+        <code>pmset -g log</code> should show a clamshell sleep. If it doesn't,
+        the helper also has to force sleep itself when the lid is shut.
+      </li>
+    </ul>
+
+    <h3>Phase B: Closed-lid mode (v1.2)</h3>
+    <ul data-anchor-id="phase-b">
+      <li>
+        <strong>Helper target.</strong> A root daemon is embedded in the app and
+        registered through <code>SMAppService</code>, only the first time the
+        user turns the mode on. Each side checks the other's code signature
+        before talking.
+      </li>
+      <li>
+        <strong>Lease, keyed per connection.</strong> The app renews every 10
+        seconds and the lease expires after 30. The timer uses uptime, not the
+        wall clock. When the app quits or crashes, the dropped connection
+        releases the lease immediately.
+      </li>
+      <li>
+        <strong>Safety stops latch.</strong> The 4-hour cap, unplugging, unknown
+        power and a serious thermal state all hold until the user turns the mode
+        back on. Later renewals are refused.
+      </li>
+      <li>
+        <strong>Recovery.</strong> The original setting is saved to a root-only
+        file on disk before anything changes. It gets restored on release, on
+        stop, when the helper starts, and when the helper is shut down. A failed
+        restore keeps retrying.
+      </li>
+      <li>
+        <strong>Read the real setting.</strong> It comes from the
+        power-management registry (<code>IOPMrootDomain</code>), not from
+        parsing <code>pmset</code>, which leaves the line out on a clean Mac. A
+        missing value fails safe.
+      </li>
+      <li>
+        <strong>Updates.</strong> The helper reports its version. When the
+        bundled helper is newer, the app releases the lease, confirms sleep is
+        back on, then re-registers the helper with retry.
+        <code>install.sh</code> and the npm installer release the lease before
+        swapping the app bundle.
+      </li>
+      <li>
+        <strong>App side.</strong> A new <code>ClosedLidController</code> owns
+        the connection and the heartbeat. The approval status is re-checked every time the menu opens and whenever the app becomes active. The checkbox is hidden on builds with no team
+        signature.
+      </li>
+      <li>
+        <strong>Tests.</strong> Lease unit tests: expiry, the cap, a renew after
+        a stop is refused, unplug, two clients, restore from the saved file, and
+        a failed restore that retries. A manual gate on your Mac with the lid
+        closed: kill the app, the cap with a shortened debug timer, and unplug.
+        Each must end in a real clamshell sleep within about 40 seconds.
+      </li>
+    </ul>
+
+    <details>
+      <summary>Findings ledger: 25 findings, 23 accepted, 2 partial</summary>
+      <table data-anchor-id="ledger">
+        <tr>
+          <th>Finding</th>
+          <th>Outcome</th>
+        </tr>
+        <tr>
+          <td>F1 Release signing breaks source builds</td>
+          <td>Accepted. Signing moves to package.sh overrides.</td>
+        </tr>
+        <tr>
+          <td>F2 Safety stops re-arm on the next renew</td>
+          <td>Accepted. Stops latch per connection until re-armed.</td>
+        </tr>
+        <tr>
+          <td>F3 pmset leaves out SleepDisabled on a clean Mac</td>
+          <td>Accepted. Read the IOPMrootDomain registry and fail closed.</td>
+        </tr>
+        <tr>
+          <td>F4 Wrong README line numbers, npm README missed</td>
+          <td>
+            Accepted. Verified: lines 21, 48 and 52, npm README 22 and 26.
+          </td>
+        </tr>
+        <tr>
+          <td>F5 Deleted-app reasoning wrong</td>
+          <td>Accepted. The real exposure is updates (M1).</td>
+        </tr>
+        <tr>
+          <td>M1 No helper update path</td>
+          <td>
+            Accepted. Version check plus a release-confirm-reregister sequence,
+            and installers release first.
+          </td>
+        </tr>
+        <tr>
+          <td>M2 Release on disconnect</td>
+          <td>Accepted.</td>
+        </tr>
+        <tr>
+          <td>M3 Restore on SIGTERM</td>
+          <td>Accepted.</td>
+        </tr>
+        <tr>
+          <td>M4 Thermal stop</td>
+          <td>Accepted.</td>
+        </tr>
+        <tr>
+          <td>M5 Prove the Mac actually sleeps</td>
+          <td>Accepted. Part of the spike and the manual gate.</td>
+        </tr>
+        <tr>
+          <td>M6 Multiple clients</td>
+          <td>Accepted. Leases keyed per connection.</td>
+        </tr>
+        <tr>
+          <td>M7 Approval round-trip</td><td>Accepted. Re-check on menu open and on app activation.</td>
+        </tr>
+        <tr>
+          <td>M8 Hide the toggle on unsigned builds</td>
+          <td>Accepted.</td>
+        </tr>
+        <tr>
+          <td>M9 Packaging and notarize order</td><td>Accepted. Notarize before zipping, and re-sign the helper before the app without --deep.</td>
+        </tr>
+        <tr>
+          <td>M10 Monotonic lease clock</td>
+          <td>Accepted.</td>
+        </tr>
+        <tr>
+          <td>O1 Battery support is gold-plating</td>
+          <td>
+            Accepted as the recommendation, left as your call (decision 1).
+          </td>
+        </tr>
+        <tr>
+          <td>O2 Untracked xcconfig</td>
+          <td>Accepted. Cut.</td>
+        </tr>
+        <tr>
+          <td>O3 Lease layer shape</td>
+          <td>Accepted. One protocol plus a test fake.</td>
+        </tr>
+        <tr>
+          <td>O4 Phase A standalone</td>
+          <td>Accepted (the reviewer kept it too).</td>
+        </tr>
+        <tr>
+          <td>E1 README citations stale</td>
+          <td>Accepted. Same fix as F4.</td>
+        </tr>
+        <tr>
+          <td>E2 Sandbox assumption untested</td><td>Accepted. Spike B0 tries a direct connection, then an embedded XPC service (Apple DTS advice), before decision 2 arises.</td>
+        </tr>
+        <tr>
+          <td>E3 Manual gate can't see sleep</td>
+          <td>Accepted. Same fix as M5.</td>
+        </tr>
+        <tr>
+          <td>E4 Certificate existing doesn't mean notarization works</td>
+          <td>Accepted. Phase A step 1.</td>
+        </tr>
+        <tr>
+          <td>E5 Other citations checked out</td>
+          <td>Partial. No change needed.</td>
+        </tr>
+        <tr>
+          <td>Weakest assumption: sandbox plus daemon</td>
+          <td>Partial. Gated by the spike, not resolved in the plan.</td>
+        </tr>
+      </table>
+      <p>
+        The original draft, the reviewer's prompt and its unedited report are in
+        the session scratchpad under <code>closed-lid/</code>.
+      </p>
+    </details>
+
+    <details>
+      <summary>Out of scope for v1</summary>
+      <ul>
+        <li><strong>Battery operation.</strong> Covered by decision 1.</li>
+        <li>
+          <strong>A "Remove Helper" button.</strong> Turning the setting off is
+          enough, because the helper holds nothing without a lease.
+        </li>
+        <li>
+          <strong>Settings UI for the caps.</strong> v1 uses fixed defaults.
+        </li>
+        <li>
+          <strong>Sparkle auto-updates and licensing.</strong> Desklamp stays
+          free, which is the edge over WakeBee.
+        </li>
+      </ul>
+    </details>
+  </body>
+</html>
